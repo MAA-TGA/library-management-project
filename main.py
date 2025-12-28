@@ -2,8 +2,8 @@ import json
 import hashlib
 import time
 import getpass
-
-from menus import admin, main, login, librarian, member,requests_menu,manage_books_menu,manage_users_menu,add_user,de_user,delete_user
+import menus
+from menus import admin, main, login, librarian, member,requests_menu,manage_books_menu,manage_users_menu,add_user,de_user,delete_user,show_users,search_menu
 from utils import sprint, clear_screen,print_centered
 
 
@@ -20,6 +20,14 @@ STATES = {
     "MEMBER": member,
     "REQUESTS" : requests_menu,
     "BOOKS" : manage_books_menu,
+    "SHOW_USERS" : show_users,
+    "BOOKSEARCH" : search_menu,
+    "ADDBOOK" : menus.add_book,
+    "EDITBOOK" : menus.edit_book,
+    "DELBOOK" : menus.delete_book,
+    "SHOWB" : menus.show_borrowed_books,
+    "RR" : menus.Return_request,
+    "ER" : menus.Extension_request,
     "MUSERS" : manage_users_menu,
     "ADD_USER" : add_user,
     "DE_USER" : de_user,
@@ -58,7 +66,6 @@ clear_screen()
 
 runner = True
 State = "MAIN"
-
 while runner:
     func = STATES.get(State)
     if func:
@@ -72,14 +79,4 @@ while runner:
         break
 
 
-if user_role == "admin":
-    print("Welcome Admin")
-    print()
-    print()
-    time.sleep(1)
-    admin()
 
-elif user_role == "librarian":
-    print("Welcome librarian")
-elif user_role == "member":
-    print("Welcome member")

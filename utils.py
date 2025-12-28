@@ -48,7 +48,7 @@ def print_centered(lines_list, prompt_text=None, footer=None):
         elif s_line and s_line[0].isdigit() and "." in s_line:
             align_lengths.append(len(l))
     
-    if prompt_text:
+    if not prompt_text == None:
         align_lengths.append(len(prompt_text))
     
     fixed_padding = (columns - max(align_lengths)) // 2 if align_lengths else 0
