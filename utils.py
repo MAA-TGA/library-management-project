@@ -29,7 +29,7 @@ def get_terminal_size():
     return shutil.get_terminal_size()
 
 
-def print_centered(lines_list, prompt_text=None, footer=None):
+def print_centered(lines_list, prompt_text=None, footer=None,input_centered=True):
     hide_cursor()
     columns, lines = shutil.get_terminal_size()
     clear_screen()
@@ -67,8 +67,13 @@ def print_centered(lines_list, prompt_text=None, footer=None):
 
     if not prompt_text == None:
         #print(" " * max(0, fixed_padding), end="")
-        input_center_padding = (columns // 2) - (len(prompt_text) // 2)
+        if input_centered:
+            input_center_padding = (columns // 2) - (len(prompt_text) // 2)
+        else:
+            input_center_padding = fixed_padding 
+        print("\r", end="")
         print(" " * max(0, input_center_padding), end="")
+        #print(f"\033[{input_center_padding + 1}G", end="", flush=True)
         if footer:
             print(f"\033[{lines};1H{footer}", end="")
             print(f"\033[{vertical_padding + content_height};{fixed_padding + 1}H", end="")

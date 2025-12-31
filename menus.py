@@ -7,29 +7,218 @@ from utils import sprint, clear_screen, draw_footer, print_centered, centered_sl
 from rapidfuzz import fuzz
 import time
 from session import session
+import uuid
+from datetime import datetime
 
 
 seconds = 0.5
 
+
 def show_borrowed_books():
-    pass
-def Extension_request():
-    pass
-def Return_request():
-    pass
-def search_menu():
-    clear_screen()
-    book_name = print_centered("","Please Enter the book name : ", "[0] Back")
-    results = []
+    with open("loans.json", "r") as f:
+        loans = json.load(f)
     with open("books.json", "r") as f:
-        books = json.loads(f)
+        books = json.load(f)
+
+    user_loans = [loan for loan in loans if loan['username']
+                  == session.username]
+    books_dict = {b['id']: b for b in books}
+
+    borrowed_books = []
+    for loan in user_loans:
+        if loan["status"] == "approved":
+            book = books_dict.get(loan['book_id'])
+            if book:
+                borrowed_books.append((loan, book))
+
+    if not borrowed_books:
+        print_centered(["You have no borrowed books."])
+        time.sleep(2)
+        return "MEMBER"
+
+    borrowed_books.sort(
+        key=lambda x: datetime.fromisoformat(x[0]["approve_date"]))
+    while True:
+        display_lines = ["=== Borrowed Books ===", ""]
+        header = f"{'No':<4} | {'Title':<30} | {'Author':<20} | {'Category':<15} | {'Borrow Date':<12} | {'Due Date':<12}"
+        display_lines.append(header)
+        display_lines.append("-" * len(header))
+        for i, (loan, book) in enumerate(borrowed_books, 1):
+            line = f"{i:<4} | {book['title']:<30} | {book['author']:<20} | {book['category']:<15} | {datetime.fromisoformat(loan["approve_date"]).strftime("%Y-%m-%d"):<12} | {datetime.fromisoformat(loan["due_date"]).strftime("%Y-%m-%d"):<12}"
+            display_lines.append(line)
+        display_lines.append("")
+        display_lines.append("")
+        display_lines.append("")
+
+        while True:
+            choice = print_centered(
+                display_lines, "Select a book to renew or return : ", "[0] Back", False)
+
+            if choice == "0":
+                return "MEMBER"
+            if not choice.isdigit() or int(choice) < 1 or int(choice) > len(borrowed_books):
+                print_centered(["Invalid choice!"])
+                time.sleep(1)
+                continue
+            loan, book = borrowed_books[int(choice) - 1]
+            break
+
+        while True:
+            action = print_centered(
+                [f"Selected book: '{book['title']}'",
+                 "1. Renew",
+                 "2. Return"],
+                ">>> ", "[0] Back"
+            ).strip().lower()
+
+            if action == "0":
+                break
+            elif action == "1":
+                loan["status"] = "renew_pending"
+                with open("loans.json", "r") as f:
+                    loans = json.load(f)
+                for l in loans:
+                    if l["loan_id"] == loan["loan_id"]:
+                        l.update(loan)
+                with open("loans.json", "w") as f:
+                    json.dump(loans, f, indent=4)
+                print_centered(["Your renewal request has been submitted."])
+                time.sleep(2)
+                return "SHOWB"
+            elif action == "2":
+                loan["status"] = "returned"
+                loan["return_date"] = datetime.now().isoformat()
+                book['available_count'] += 1
+                with open("loans.json", "r") as f:
+                    loans = json.load(f)
+                for l in loans:
+                    if l["loan_id"] == loan["loan_id"]:
+                        l.update(loan)
+                with open("loans.json", "w") as f:
+                    json.dump(loans, f, indent=4)
+                with open("books.json", "r") as f:
+                    books = json.load(f)
+                for b in books:
+                    if b["id"] == book["id"]:
+                        b.update(book)
+                with open("books.json", "w") as f:
+                    json.dump(books, f, indent=4)
+                print_centered(
+                    [f"You have successfully returned '{book['title']}'"])
+                time.sleep(2)
+                return "SHOWB"
+            else:
+                print_centered(["Invalid choice!"])
+                time.sleep(1)
+                continue
+
+
+def search_menu():
+    with open("books.json", "r") as f:
+        books = json.load(f)
+    clear_screen()
+    while True:
+        book_name = print_centered(
+            "", "Please Enter the book name : ", "[0] Back")
+        if book_name == "0":
+            break
+        results = []
         for book in books:
-            score = fuzz.partial_ratio()
+            score = fuzz.partial_ratio(
+                book_name.lower(), book['title'].lower())
             if score >= 70:
-                results.append(score, book)
+                results.append((score, book))
         results.sort(reverse=True, key=lambda x: x[0])
-    print_centered(results,"","[0] Back")
-    
+        if not results:
+            print_centered(["No matching books found."])
+            time.sleep(1)
+            continue
+
+        while True:
+            display_lines = ["=== Matching Books ===", ""]
+            header = f"{'No':<4} | {'Title':<30} | {'Author':<20} | {'Category':<15} | {'Total':<5} | {'Available':<10}"
+            display_lines.append(header)
+            display_lines.append("-" * len(header))
+            for i, (score, book) in enumerate(results, 1):
+                line = f"{i:<4} | {book['title']:<30} | {book['author']:<20} | {book['category']:<15} | {book['total_count']:<5} | {book['available_count']:<10}"
+                display_lines.append(line)
+            display_lines.append("")
+            display_lines.append("")
+            display_lines.append("")
+
+            choice = print_centered(
+                display_lines, "chose a book for borrowing : ", "[0] Back", False)
+
+            if choice == "0":
+                break
+            if not choice.isdigit() or int(choice) < 1 or int(choice) > len(results):
+                print_centered(["Invalid choice!"])
+                time.sleep(1)
+                continue
+            book = results[int(choice) - 1][1]
+
+            with open("loans.json", "r") as f:
+                loans = json.load(f)
+
+            user_loans = [
+                loan for loan in loans
+                if loan['book_id'] == book['id']
+                and loan['username'] == session.username
+            ]
+
+            illegal = True
+            for loan in user_loans:
+                if loan['status'] == "pending":
+                    illegal = False
+                    print_centered(
+                        ["You already have a pending request for this book. Please wait for it to be approved"])
+                    time.sleep(2)
+                    break
+
+                elif loan['status'] == "approved":
+                    illegal = False
+                    print_centered([
+                        "You have already borrowed this book.",
+                        "You must return it before requesting again."
+                    ])
+                    time.sleep(2)
+                    break
+            if not illegal:
+                continue
+
+            if book['available_count'] <= 0:
+                print_centered(
+                    [f"Sorry, '{book['title']}' is not available for borrowing."])
+                time.sleep(2)
+                continue
+
+            confirm = print_centered(
+                [f"Do you want to borrow '{book['title']}'?"],
+                "Enter Y to confirm, N to cancel: ",
+                "[0] Back").strip().lower()
+
+            if confirm == "y":
+                new_loan = {
+                    "loan_id": str(uuid.uuid4()),
+                    "username": session.username,
+                    "book_id": book['id'],
+                    "status": "pending",
+                    "request_date": datetime.now().isoformat(),
+                    "approve_date": None,
+                    "due_date": None,
+                    "return_date": None
+                }
+
+                loans.append(new_loan)
+                with open("loans.json", "w") as f:
+                    json.dump(loans, f, indent=4)
+
+                print_centered(
+                    ["Your request has been submitted and is waiting for approval."])
+                time.sleep(2)
+            else:
+                continue
+    return "MEMBER"
 
 
 def show_users():
@@ -53,7 +242,7 @@ def show_users():
     display_lines.append("")
     display_lines.append("")
 
-    print_centered(display_lines, "", "[0] Back")
+    print_centered(display_lines, ">>> ", "[0] Back")
 
     return "MUSERS"
 
@@ -110,7 +299,7 @@ def add_user():
                         json.dump(users, fw, indent=4)
                     print_centered(["User added successfully!"])
                     time.sleep(1)
-                    return "ADD_USER"
+                    return "MUSER"
                 continue
             continue
         continue
@@ -121,9 +310,181 @@ def de_user():
 
 
 def add_book():
-    pass
+    with open("books.json", "r") as f:
+        books = json.load(f)
+
+    while True:
+        title = print_centered("", "title : ", "[0] Back")
+        if title == "0":
+            return "BOOKS"
+        if not title:
+            print_centered(["Enter a valid title"])
+            time.sleep(1)
+            continue
+
+        while True:
+            author = print_centered(
+                ["title : " + f"{title}"], "author : ", "[0] Back")
+            if author == "0":
+                break
+            if not author:
+                print_centered(["Enter a valid author"])
+                time.sleep(1)
+                continue
+
+            while True:
+                category = print_centered(
+                    ["title : " + f"{title}",
+                     "author : " + f"{author}"],
+                    "category : ",
+                    "[0] Back"
+                )
+                if category == "0":
+                    break
+                if not category:
+                    print_centered(["Enter a valid category"])
+                    time.sleep(1)
+                    continue
+
+                while True:
+                    total_count = print_centered(
+                        ["title : " + f"{title}",
+                         "author : " + f"{author}",
+                         "category : " + f"{category}"],
+                        "total count : ",
+                        "[0] Back"
+                    )
+                    if total_count == "0":
+                        break
+                    if not total_count.isdigit() or int(total_count) <= 0:
+                        print_centered(["Enter a valid number (> 0)"])
+                        time.sleep(1)
+                        continue
+
+                    total_count = int(total_count)
+
+                    new_book = {
+                        "title": title,
+                        "author": author,
+                        "category": category,
+                        "total_count": total_count,
+                        "available_count": total_count
+                    }
+
+                    existing = next(
+                        (b for b in books
+                         if b["title"] == title
+                            and b["author"] == author
+                            and b["category"] == category),
+                        None
+                    )
+
+                    if existing:
+                        existing["total_count"] += total_count
+                        existing["available_count"] += total_count
+                        message = f"Book exists. {total_count} copies added. Total: {existing['total_count']}"
+                        s = 3
+                    else:
+                        new_book = {"id": str(uuid.uuid4()), **new_book}
+                        books.append(new_book)
+                        message = "Book added successfully!"
+                        s = 1.5
+
+                    with open("books.json", "w") as f:
+                        json.dump(books, f, indent=4)
+
+                    print_centered([message])
+                    time.sleep(s)
+                    return "BOOKS"
+                continue
+            continue
+        continue
+
+
 def edit_book():
-    pass
+    with open("books.json", "r") as f:
+        books = json.load(f)
+
+    while True:
+        title = print_centered(
+            "", "Enter the title of the book to edit: ", "[0] Back")
+        if title == "0":
+            return "BOOKS"
+
+        matching_books = [b for b in books if b["title"] == title]
+        if not matching_books:
+            print_centered(["Book not found!"])
+            time.sleep(1)
+            continue
+
+        while True:
+            if len(matching_books) > 1:
+                display_lines = ["=== Matching Books ===", ""]
+                header = f"{'No.':<4} | {'Title':<20} | {'Author':<20} | {'Category':<15} | {'Total':<5} | {'Available':<5}"
+                display_lines.append(header)
+                display_lines.append("-" * len(header))
+                for i, b in enumerate(matching_books, 1):
+                    line = f"{i:<4} | {b['title']:<20} | {b['author']:<20} | {b['category']:<15} | {b['total_count']:<5} | {b['available_count']:<5}"
+                    display_lines.append(line)
+                display_lines.append("")
+                display_lines.append("")
+                choice = print_centered(
+                    display_lines, "Enter the number of the book to edit: ", "[0] Back")
+                if choice == "0":
+                    break
+                if not choice.isdigit() or int(choice) < 1 or int(choice) > len(matching_books):
+                    print_centered(["Invalid choice!"])
+                    time.sleep(1)
+                    continue
+                book = matching_books[int(choice) - 1]
+                break
+            else:
+                book = matching_books[0]
+                break
+
+        while True:
+            new_author = print_centered(
+                [f"Current author: {book['author']}"], "Enter new author: ", "[0] Back")
+            if new_author == "0":
+                break
+            if new_author.strip() == "":
+                print_centered(["Enter a valid author"])
+                time.sleep(1)
+                continue
+            book["author"] = new_author.strip()
+
+            while True:
+                new_category = print_centered(
+                    [f"Current category: {book['category']}"], "Enter new category: ", "[0] Back")
+                if new_category == "0":
+                    break
+                if new_category.strip() == "":
+                    print_centered(["Enter a valid category"])
+                    time.sleep(1)
+                    continue
+                book["category"] = new_category.strip()
+
+                while True:
+                    new_total = print_centered(
+                        [f"Current total count: {book['total_count']}"], "Enter new total count: ", "[0] Back")
+                    if new_total == "0":
+                        break
+                    if not new_total.isdigit() or int(new_total) <= 0:
+                        print_centered(["Enter a valid number greater than 0"])
+                        time.sleep(1)
+                        continue
+                    diff = int(new_total) - book["total_count"]
+                    book["total_count"] = int(new_total)
+                    book["available_count"] += diff
+
+                    with open("books.json", "w") as f:
+                        json.dump(books, f, indent=4)
+
+                    print_centered(["Book updated successfully!"])
+                    time.sleep(1)
+                    return "BOOKS"
+
+
 def delete_book():
     with open("books.json", "r") as f:
         books = json.load(f)
@@ -181,6 +542,7 @@ def delete_book():
                 print_centered(["Author not found for this title!"])
                 time.sleep(1)
 
+
 def delete_user():
     with open("users.json", "r") as f:
         users = json.load(f)
@@ -212,7 +574,7 @@ def manage_books_menu():
         return "EDITBOOK"
     elif choice == "3":
         return "DELBOOK"
-    else :
+    else:
         return "BOOKS"
     pass
 
@@ -237,21 +599,84 @@ def manage_users_menu():
 
 def requests_menu():
     clear_screen()
-    Lines = ["=== Requests ===", ""]
-    f = open("loans.json", "r+")
+    with open("loans.json", "r") as f:
+        loans = json.load(f)
+    with open("books.json", "r") as f:
+        books = json.load(f)
+    books_dict = {b['id']: b for b in books}
+    pending_loans = [loan for loan in loans if loan['status']
+                     in ("pending", "renew_pending")]
 
-    print_centered
+    while True:
+        display_lines = ["=== Pending Requests ===", ""]
+        header = f"{'No':<4} | {'Book Title':<30} | {'User':<15} | {'Type':<12} | {'Request Date':<20}"
+        display_lines.append(header)
+        display_lines.append("-" * len(header))
+
+        for i, loan in enumerate(pending_loans, 1):
+            book = books_dict.get(loan['book_id'], {"title": "Unknown"})
+            request_type = "Borrow" if loan['status'] == "pending" else "Renew"
+            request_date = datetime.fromisoformat(
+                loan['request_date']).strftime("%Y-%m-%d")
+            line = f"{i:<4} | {book['title']:<30} | {loan['username']:<15} | {request_type:<12} | {request_date:<20}"
+            display_lines.append(line)
+
+        display_lines.append("")
+        display_lines.append("")
+
+        while True:
+            choice = print_centered(
+                display_lines, "Select a request to approve/reject: ", "[0] Back")
+            if choice == "0":
+                return session.role
+            elif not choice.isdigit() or int(choice) < 1 or int(choice) > len(pending_loans):
+                print_centered(["Invalid choice!"])
+                time.sleep(1)
+                continue
+            selected_loan = pending_loans[int(choice) - 1]
+            break
+
+        while True:
+            action = print_centered(
+                [f"Request for '{books_dict[selected_loan['book_id']]['title']}' by {selected_loan['username']}","",
+                 "1. Approve",
+                 "2. Reject",""],
+                ">>> ", "[0] Back"
+            ).strip()
+
+            if action == "0":
+                break
+            elif action == "1":
+                if selected_loan['status'] == "pending":
+                    selected_loan['status'] = "approved"
+                    selected_loan['approve_date'] = datetime.now().isoformat()
+                    selected_loan['due_date'] = (datetime.now() + datetime.timedelta(days=14)).isoformat()
+                    books_dict[selected_loan['book_id']
+                               ]['available_count'] -= 1
+                elif selected_loan['status'] == "renew_pending":
+                    selected_loan['status'] = "approved"
+                    selected_loan['approve_date'] = datetime.now().isoformat()
+                print_centered(["Request approved."])
+                time.sleep(2)
+            elif action == "2":
+                selected_loan['status'] = "rejected"
+                print_centered(["Request rejected."])
+            with open("loans.json", "w") as f:
+                json.dump(loans, f, indent=4)
+            with open("books.json", "w") as f:
+                json.dump(list(books_dict.values()), f, indent=4)
+            return "REQUESTS"
 
 
 def main():
     clear_screen()
     Lines = ["=== Library Management System ===",
-             "", "", "1. Login", "", "0. Exit", ""]
+             "", "", "1. Login", "0. Exit", ""]
     choice = print_centered(Lines, "")
     # print("1. Login")
     # print("0. Exit")
-    if choice == "4":
-        return "ADD_USER"
+    if choice == "3":
+        return "MEMBER"
     if choice == "1":
         return "LOGIN"
     elif choice == "0":
@@ -272,8 +697,9 @@ def login():
             ["=== Login ===", "", ""], "Please enter the username : ", "[0] Back")
         if username == "0":
             return "MAIN"
+
         password = print_centered(
-            ["=== Login ===", "", "", f"Please enter the username : {username}"], "Please enter the password : ")
+            ["=== Login ===", "", "", " Please enter the username : " + f"{username}"], "Please enter the password : ")
         clear_screen()
         for user in users:
             if user["username"] == username:
@@ -282,8 +708,9 @@ def login():
                     session.username = username
                     session.role = user["role"].upper()
                     session.logged_in = True
-                    time.sleep(seconds)
                     print_centered(["Login successful!"])
+                    time.sleep(1)
+
                     return user["role"].upper()
                     # user_role = user["role"]
                     # runner = False
@@ -302,7 +729,7 @@ def login():
 def admin():
     clear_screen()
     Lines = [
-        "=== Admin panel ===",
+        "=== Admin panel ===","",
         "1. View and manage requests",
         "2. Add / Edit / Delete books",
         "3. Manage users", "", ""
@@ -325,10 +752,10 @@ def librarian():
     Lines = [
         "=== Librarian panel ===",
         "1. View and manage requests",
-        "2. Add / Edit / Delete books", "",""
+        "2. Add / Edit / Delete books", "", ""
     ]
     choice = print_centered(Lines, ">>> ", "[0] Back")
-    
+
     if choice == "0":
         return "MAIN"
     elif choice == "1":
@@ -339,33 +766,23 @@ def librarian():
         return "LIBRARIAN"
 
 
-
-
 def member():
     clear_screen()
     Lines = [
-    "=== Member Panel ===",
-    "1. Search books",
-    "2. View borrowed books",
-    "3. Extension request",
-    "4. Return request",
-    "0. Return to main menu",
+        "=== Member Panel ===",
+        "1. Search books",
+        "2. View borrowed books"
     ]
     choice = print_centered(Lines, ">>> ", "[0] Back")
-    
+
     if choice == "0":
         return "MAIN"
     elif choice == "1":
         return "BOOKSEARCH"
     elif choice == "2":
         return "SHOWB"
-    elif choice == "3":
-        return "ER"
-    elif choice == "4":
-        return "RR"
     else:
         return "MEMBER"
-
 
 
 '''def admin():

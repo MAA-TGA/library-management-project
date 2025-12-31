@@ -26,8 +26,6 @@ STATES = {
     "EDITBOOK" : menus.edit_book,
     "DELBOOK" : menus.delete_book,
     "SHOWB" : menus.show_borrowed_books,
-    "RR" : menus.Return_request,
-    "ER" : menus.Extension_request,
     "MUSERS" : manage_users_menu,
     "ADD_USER" : add_user,
     "DE_USER" : de_user,
@@ -72,9 +70,9 @@ while runner:
         State = func()
     else :
         clear_screen()
-        time.sleep(0.5)
         print_centered(["Good bye!"])
         time.sleep(0.5)
+        clear_screen()
         runner = False
         break
 
