@@ -42,8 +42,8 @@ FILES = {
             "role": "admin"
         }
     ]),
-    "books": ("books.json", [{}]),
-    "loans": ("loans.json", [{}])
+    "books": ("books.json", []),
+    "loans": ("loans.json", [])
 }
 
 
