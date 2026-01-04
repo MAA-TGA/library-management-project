@@ -20,6 +20,7 @@ STATES = {
     "MEMBER": member,
     "REQUESTS" : requests_menu,
     "BOOKS" : manage_books_menu,
+    "SHOWBOOKS" : menus.show_books,
     "SHOW_USERS" : show_users,
     "BOOKSEARCH" : search_menu,
     "ADDBOOK" : menus.add_book,

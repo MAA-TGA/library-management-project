@@ -8,7 +8,7 @@ from rapidfuzz import fuzz
 import time
 from session import session
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 seconds = 0.5
@@ -26,7 +26,7 @@ def show_borrowed_books():
 
     borrowed_books = []
     for loan in user_loans:
-        if loan["status"] == "approved":
+        if loan["status"] == "approved" :
             book = books_dict.get(loan['book_id'])
             if book:
                 borrowed_books.append((loan, book))
@@ -65,7 +65,7 @@ def show_borrowed_books():
 
         while True:
             action = print_centered(
-                [f"Selected book: '{book['title']}'",
+                [f"Selected book '{book['title']}'",
                  "1. Renew",
                  "2. Return"],
                 ">>> ", "[0] Back"
@@ -113,6 +113,109 @@ def show_borrowed_books():
                 continue
 
 
+def show_books():
+    with open("books.json", "r") as f:
+        books = json.load(f)
+    if not books:
+        print_centered(["No books available."])
+        time.sleep(2)
+        return session.role
+
+    while True:
+        display_lines = ["=== Books ===", ""]
+        header = f"{'No':<4} | {'Title':<30} | {'Author':<20} | {'Category':<15} | {'Avail':<6} | {'Total':<5}"
+        display_lines.append(header)
+        display_lines.append("-" * len(header))
+
+        for i, book in enumerate(books, 1):
+            line = f"{i:<4} | {book['title']:<30} | {book['author']:<20} | {book['category']:<15} | {book['available_count']:<6} | "f"{book['total_count']:<5}"
+            display_lines.append(line)
+
+        display_lines.append("")
+
+        choice = print_centered(
+            display_lines, "Select a book to edit or delete : ", "[0] Back   [A] Add Book").strip().lower()
+
+        if choice == "0":
+            return "BOOKS"
+        if choice == "a":
+            return "ADDBOOK"
+        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(books):
+            print_centered(["Invalid choice!"])
+            time.sleep(1)
+            continue
+
+        book = books[int(choice) - 1]
+        break
+    while True:
+        action = print_centered(
+            [
+                f"Selected book '{book['title']}'","",
+                "1. Edit",
+                "2. Delete"
+            ],
+            ">>> ", "[0] Back"
+        ).strip()
+        if action == "0":
+            return "SHOWBOOKS"
+        if action == "1":
+            while True:
+                new_author = print_centered(
+                    [f"Current author: {book['author']}"], "Enter new author: ", "[0] Back")
+                if new_author == "0":
+                    break
+                if new_author.strip() == "":
+                    print_centered(["Enter a valid author"])
+                    time.sleep(1)
+                    continue
+                book["author"] = new_author.strip()
+
+                while True:
+                    new_category = print_centered(
+                        [f"Current category: {book['category']}"], "Enter new category: ", "[0] Back")
+                    if new_category == "0":
+                        break
+                    if new_category.strip() == "":
+                        print_centered(["Enter a valid category"])
+                        time.sleep(1)
+                        continue
+                    book["category"] = new_category.strip()
+
+                    while True:
+                        new_total = print_centered(
+                            [f"Current total count: {book['total_count']}"], "Enter new total count: ", "[0] Back")
+                        if new_total == "0":
+                            break
+                        if not new_total.isdigit() or int(new_total) <= 0:
+                            print_centered(["Enter a valid number greater than 0"])
+                            time.sleep(1)
+                            continue
+                        diff = int(new_total) - book["total_count"]
+                        book["total_count"] = int(new_total)
+                        book["available_count"] += diff
+
+                        with open("books.json", "w") as f:
+                            json.dump(books, f, indent=4)
+
+                        print_centered(["Book updated successfully!"])
+                        time.sleep(1)
+                        return "SHOWBOOKS"
+        if action == "2":
+            if book["available_count"] != book["total_count"]:
+                print_centered(["Cannot delete book active loans exist."])
+                time.sleep(2)
+                continue
+            books.remove(book)
+            with open("books.json", "w") as f:
+                json.dump(books, f, indent=4)
+            print_centered(["Book deleted successfully."])
+            time.sleep(2)
+            return "SHOWBOOKS"
+        else:
+            print_centered(["Invalid choice!"])
+            time.sleep(1)
+
+
 def search_menu():
     with open("books.json", "r") as f:
         books = json.load(f)
@@ -122,6 +225,8 @@ def search_menu():
             "", "Please Enter the book name : ", "[0] Back")
         if book_name == "0":
             break
+        if len(book_name) <= 3:
+            book_name = ""
         results = []
         for book in books:
             score = fuzz.partial_ratio(
@@ -560,11 +665,12 @@ def delete_user():
             time.sleep(1)
         else:
             print_centered(["User not found!"])
+            time.sleep(1)
 
 
 def manage_books_menu():
     Lines = ["=== Books Management ===", "1. Add New Book", "2. Edit Book",
-             "3. Delete Book"]
+             "3. Delete Book", "4. Show books"]
     choice = print_centered(Lines, ">>", "[0] Back")
     if choice == "0":
         return session.role
@@ -574,6 +680,8 @@ def manage_books_menu():
         return "EDITBOOK"
     elif choice == "3":
         return "DELBOOK"
+    elif choice == "4":
+        return "SHOWBOOKS"
     else:
         return "BOOKS"
     pass
@@ -638,9 +746,9 @@ def requests_menu():
 
         while True:
             action = print_centered(
-                [f"Request for '{books_dict[selected_loan['book_id']]['title']}' by {selected_loan['username']}","",
+                [f"Request for '{books_dict[selected_loan['book_id']]['title']}' by {selected_loan['username']}", "",
                  "1. Approve",
-                 "2. Reject",""],
+                 "2. Reject", ""],
                 ">>> ", "[0] Back"
             ).strip()
 
@@ -650,7 +758,8 @@ def requests_menu():
                 if selected_loan['status'] == "pending":
                     selected_loan['status'] = "approved"
                     selected_loan['approve_date'] = datetime.now().isoformat()
-                    selected_loan['due_date'] = (datetime.now() + datetime.timedelta(days=14)).isoformat()
+                    selected_loan['due_date'] = (
+                        datetime.now() + timedelta(days=14)).isoformat()
                     books_dict[selected_loan['book_id']
                                ]['available_count'] -= 1
                 elif selected_loan['status'] == "renew_pending":
@@ -659,8 +768,9 @@ def requests_menu():
                 print_centered(["Request approved."])
                 time.sleep(2)
             elif action == "2":
-                selected_loan['status'] = "rejected"
+                selected_loan['status'] = "approved"
                 print_centered(["Request rejected."])
+                time.sleep(1)
             with open("loans.json", "w") as f:
                 json.dump(loans, f, indent=4)
             with open("books.json", "w") as f:
@@ -729,7 +839,7 @@ def login():
 def admin():
     clear_screen()
     Lines = [
-        "=== Admin panel ===","",
+        "=== Admin panel ===", "",
         "1. View and manage requests",
         "2. Add / Edit / Delete books",
         "3. Manage users", "", ""
